@@ -1,34 +1,66 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
-}
-
-.App-header {
-    background-color: #0f0f10;
+.App {
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
+    background-color: #050608;
+    color: #F1F5F9;
 }
 
-.App-link {
-    color: #61dafb;
+/* Typewriter caret */
+.typewriter-caret::after {
+    content: "▊";
+    color: #00E5FF;
+    animation: blink 1s step-end infinite;
+    margin-left: 2px;
 }
 
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+@keyframes blink {
+    50% { opacity: 0; }
+}
+
+/* Override shadcn buttons to tactical theme */
+.tactical-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+    padding: 0.625rem 1.25rem;
+    border: 1px solid #212530;
+    background: transparent;
+    color: #F1F5F9;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.tactical-btn:hover {
+    border-color: #00E5FF;
+    color: #00E5FF;
+    text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
+    background: rgba(0, 229, 255, 0.05);
+}
+
+.tactical-btn-primary {
+    background: #00E5FF;
+    color: #050608;
+    border-color: #00E5FF;
+}
+
+.tactical-btn-primary:hover {
+    background: #5CFFFF;
+    color: #050608;
+    text-shadow: none;
+    box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
+}
+
+.tactical-btn-danger:hover {
+    border-color: #FF3D00;
+    color: #FF3D00;
+    text-shadow: 0 0 8px rgba(255, 61, 0, 0.6);
+}
+
+/* Label style */
+.label-mono {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #8A94A6;
 }
