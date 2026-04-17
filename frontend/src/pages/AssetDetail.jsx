@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { StatusBadge, ReadinessBar, PanelCard } from "../components/Tactical";
 import ShipViewer3D from "../components/ShipViewer3D";
+import LogisticsTank from "../components/LogisticsTank";
 import {
   ArrowLeft, Edit, Trash2, Brain, Anchor, MapPin, User, Ship, Building2, Users, Radar, Target,
 } from "lucide-react";
@@ -236,9 +237,9 @@ export default function AssetDetail() {
 
           {/* Logistics */}
           <PanelCard title="KONDISI LOGISTIK" testid="logistics-panel">
-            <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
               {Object.entries(asset.logistics || {}).map(([k, v]) => (
-                <ReadinessBar key={k} value={v} label={k.replace(/_/g, " ")} />
+                <LogisticsTank key={k} type={k} value={v} />
               ))}
             </div>
           </PanelCard>
