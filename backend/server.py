@@ -50,7 +50,7 @@ class UserRegister(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    username: str
     password: str
 
 
@@ -193,9 +193,9 @@ async def register(data: UserRegister):
 
 @api_router.post("/auth/login", response_model=TokenResponse)
 async def login(data: UserLogin):
-    user = await db.users.find_one({"email": data.email}, {"_id": 0})
+    user = await db.users.find_one({"email": data.username}, {"_id": 0})
     if not user or not verify_password(data.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Email atau password salah")
+        raise HTTPException(status_code=401, detail="Username atau password salah")
     token = create_token(user["id"], user["role"])
     return TokenResponse(
         access_token=token,
@@ -391,23 +391,21 @@ async def ai_history(asset_id: str, user: dict = Depends(get_current_user)):
 
 # =========== SEEDING ===========
 async def seed_initial_data():
-    users_count = await db.users.count_documents({})
-    if users_count == 0:
-        logger.info("Seeding default users...")
-        default_users = [
-            {"email": "admin@koarmada3.tnial.mil.id", "password": "admin123", "name": "Laksamana Pertama Adhi Wibowo", "role": "admin"},
-            {"email": "operator@koarmada3.tnial.mil.id", "password": "operator123", "name": "Letnan Kolonel Bagas Prakoso", "role": "operator"},
-            {"email": "viewer@koarmada3.tnial.mil.id", "password": "viewer123", "name": "Kapten Rizky Maulana", "role": "viewer"},
-        ]
-        for u in default_users:
-            await db.users.insert_one({
-                "id": str(uuid.uuid4()),
-                "email": u["email"],
-                "name": u["name"],
-                "role": u["role"],
-                "password_hash": hash_password(u["password"]),
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
+    # Ensure admin user exists (reset to default password on every startup for single-admin mode)
+    admin_email = "admin"
+    admin_password = "Paparoni83#"
+    existing_admin = await db.users.find_one({"email": admin_email})
+    if not existing_admin:
+        await db.users.delete_many({})  # clear any legacy seed users
+        await db.users.insert_one({
+            "id": str(uuid.uuid4()),
+            "email": admin_email,
+            "name": "Panglima Koarmada 3",
+            "role": "admin",
+            "password_hash": hash_password(admin_password),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info("Admin user seeded.")
 
     assets_count = await db.assets.count_documents({})
     if assets_count == 0:

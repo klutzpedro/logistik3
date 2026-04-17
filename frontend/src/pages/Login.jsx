@@ -6,8 +6,8 @@ import { Anchor, Radar, ShieldCheck, AlertCircle } from "lucide-react";
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@koarmada3.tnial.mil.id");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("admin");
+  const [password, setPassword] = useState("");
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -73,15 +73,15 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-5" data-testid="login-form">
             <div>
-              <label className="label-mono mb-2 block">Email / NRP</label>
+              <label className="label-mono mb-2 block">Username</label>
               <input
-                type="email"
+                type="text"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 data-testid="login-email"
                 className="w-full bg-[#050608] border border-[#212530] px-4 py-3 text-sm focus:outline-none focus:border-[#00E5FF] focus:ring-1 focus:ring-[#00E5FF] mono transition-all"
-                placeholder="komandan@koarmada3.tnial.mil.id"
+                placeholder="admin"
               />
             </div>
             <div>
@@ -112,15 +112,6 @@ export default function Login() {
             >
               {loading ? "AUTHORIZING..." : "INITIATE ACCESS"}
             </button>
-
-            <div className="pt-4 border-t border-[#212530]">
-              <div className="label-mono mb-2">Demo Credentials</div>
-              <div className="text-xs mono text-[#8A94A6] space-y-1">
-                <div>admin@koarmada3.tnial.mil.id / admin123</div>
-                <div>operator@koarmada3.tnial.mil.id / operator123</div>
-                <div>viewer@koarmada3.tnial.mil.id / viewer123</div>
-              </div>
-            </div>
 
             <div className="text-center text-xs text-[#8A94A6]">
               Belum terdaftar?{" "}

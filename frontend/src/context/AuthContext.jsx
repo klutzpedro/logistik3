@@ -10,8 +10,8 @@ export function AuthProvider({ children }) {
   });
   const [loading, setLoading] = useState(false);
 
-  const login = async (email, password) => {
-    const { data } = await api.post("/auth/login", { email, password });
+  const login = async (username, password) => {
+    const { data } = await api.post("/auth/login", { username, password });
     localStorage.setItem("koarmada_token", data.access_token);
     localStorage.setItem("koarmada_user", JSON.stringify(data.user));
     setUser(data.user);
