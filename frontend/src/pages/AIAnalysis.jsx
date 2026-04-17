@@ -73,12 +73,12 @@ export default function AIAnalysis() {
               <option value="">-- Pilih Aset --</option>
               <optgroup label="KAPAL">
                 {assets.filter((a) => a.type === "kapal").map((a) => (
-                  <option key={a.id} value={a.id}>{a.code} · {a.name}</option>
+                  <option key={a.id} value={a.id}>{`${a.code} · ${a.name}`}</option>
                 ))}
               </optgroup>
               <optgroup label="PANGKALAN">
                 {assets.filter((a) => a.type === "pangkalan").map((a) => (
-                  <option key={a.id} value={a.id}>{a.code} · {a.name}</option>
+                  <option key={a.id} value={a.id}>{`${a.code} · ${a.name}`}</option>
                 ))}
               </optgroup>
             </select>
