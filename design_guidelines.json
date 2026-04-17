@@ -1,0 +1,130 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 2: The Performance Pro (Tactical Command Center Variant)",
+  "core_principles": [
+    "User-centric efficiency with high visual clarity",
+    "Neutral/Obsidian backgrounds with high-contrast glowing accents",
+    "Dense, functional control-room grid with cardless rectangular elements",
+    "Strict alignment and precise borders over soft shadows"
+  ],
+  "typography": {
+    "heading_font": "Exo 2",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "IBM Plex Mono",
+    "scales": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl font-semibold",
+      "body": "text-base leading-relaxed",
+      "labels": "text-xs font-mono uppercase tracking-[0.2em] text-[#8A94A6]"
+    },
+    "instruction": "Agent MUST import 'Exo 2', 'IBM Plex Sans', and 'IBM Plex Mono' from Google Fonts in the main HTML/CSS."
+  },
+  "colors": {
+    "background": "#050608",
+    "surface": "#101216",
+    "surface_hover": "#171A21",
+    "border": "#212530",
+    "primary": "#00E5FF",
+    "primary_hover": "#5CFFFF",
+    "text_main": "#F1F5F9",
+    "text_muted": "#8A94A6",
+    "status": {
+      "siap": "#00E676",
+      "siap_terbatas": "#FFC400",
+      "tidak_siap": "#FF3D00"
+    }
+  },
+  "spacing_and_layout": {
+    "padding_generous": "p-6 sm:p-8",
+    "grid_dashboard": "grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6",
+    "radius": "rounded-none sm:rounded-sm",
+    "card_style": "bg-[#101216] border border-[#212530] shadow-none"
+  },
+  "components": {
+    "buttons": "Flat background, 1px border. Hover: Glowing cyan text shadow and slight lift. Font: IBM Plex Mono uppercase.",
+    "inputs": "Shadcn based. bg-[#050608], border-[#212530], text-[#F1F5F9]. Focus: ring-1 ring-[#00E5FF] border-[#00E5FF].",
+    "progress_bars": "Tactical style. Square edges. Neon glow based on status (e.g., BBM level uses green/amber/red based on %).",
+    "tables": "Dense. 1px border-b on rows. Hover: bg-[#171A21]. Headers in uppercase mono font.",
+    "tabs": "Underline style with cyan indicator, or sharp rectangular blocks."
+  },
+  "visual_enhancers": {
+    "surfaces": [
+      {
+        "name": "The Tracing Beam",
+        "usage": "AI Analysis Panel or Active Alerts",
+        "implementation": "1px moving gradient border using Framer Motion or CSS animation, blurred for light bleed."
+      },
+      {
+        "name": "Retro-Futurism / Terminal",
+        "usage": "Intelligence or Data feeds",
+        "implementation": "Scanline background overlay, subtle text drop-shadow for glow effect."
+      }
+    ]
+  },
+  "3d_strategy": {
+    "library": "@react-three/fiber and @react-three/drei",
+    "usage": "Interactive ship visualization on asset details. Use OrbitControls. Provide a wireframe or metallic shader for the 3D model to fit the tactical theme.",
+    "lighting": "Low ambient light, strong directional cyan/blue lights to highlight edges."
+  },
+  "media": {
+    "hero_backgrounds": [
+      {
+        "category": "auth_and_dashboard_bg",
+        "url": "https://images.unsplash.com/photo-1733195296321-b99d129b09cd",
+        "description": "Digital holographic globe for command center login background"
+      },
+      {
+        "category": "sonar_radar",
+        "url": "https://images.unsplash.com/photo-1757882585667-dffbeaaabb81",
+        "description": "Nautical navigation/sonar screen for intelligence panels"
+      }
+    ],
+    "ships": [
+      {
+        "category": "kri_asset_1",
+        "url": "https://images.unsplash.com/photo-1768754707973-282ae26e3aa2",
+        "description": "Modern gray warship - Dummy KRI 1"
+      },
+      {
+        "category": "kri_asset_2",
+        "url": "https://images.unsplash.com/photo-1692603107931-8676aa4574f5",
+        "description": "Large military ship docked - Dummy KRI 2"
+      },
+      {
+        "category": "kri_asset_3",
+        "url": "https://images.unsplash.com/photo-1759687448389-757d021525d0",
+        "description": "Submarine - Dummy KRI 3"
+      }
+    ],
+    "bases": [
+      {
+        "category": "pangkalan_asset_1",
+        "url": "https://images.unsplash.com/photo-1756755148763-ef15c312dd09",
+        "description": "Naval base port at night - Sorong/Manokwari dummy"
+      }
+    ],
+    "personnel": [
+      {
+        "category": "officer_1",
+        "url": "https://images.unsplash.com/photo-1714272663284-5ce8ab649ecd",
+        "description": "Staff profile"
+      },
+      {
+        "category": "officer_2",
+        "url": "https://images.unsplash.com/photo-1771343917024-0b5397850ccd",
+        "description": "Staff profile"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Ensure dark mode is forced on everything. Remove all white-background defaults from Shadcn components.",
+    "Implement Auth flow with custom JWT logic as requested.",
+    "For the 3D ship viewer, use Three.js (@react-three/fiber). Use a placeholder box or generic primitive if no ship 3D model is available, but apply a wireframe or custom material to look tactical.",
+    "Base64 image storage: Convert image uploads to base64 strings and store in the database/localStorage.",
+    "For the AI Analysis feature (Claude Sonnet 4.5), simulate an API call or connect if you have keys. Output the AI text with a typewriter effect for the tactical feel.",
+    "Use Phosphor icons (@phosphor-icons/react) with weight='regular' for a clean, technical look.",
+    "Strictly avoid 'Inter' for headings. Use Exo 2 and IBM Plex Mono.",
+    "Add data-testid attributes to all interactive elements for testing."
+  ]
+}
