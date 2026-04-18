@@ -12,6 +12,17 @@ import AIAnalysis from "./pages/AIAnalysis";
 import Layout from "./components/Layout";
 import { Toaster } from "sonner";
 
+function TitleSetter() {
+  useEffect(() => {
+    document.title = "Logistic3";
+    const i = setInterval(() => {
+      if (document.title !== "Logistic3") document.title = "Logistic3";
+    }, 1000);
+    return () => clearInterval(i);
+  }, []);
+  return null;
+}
+
 function RequireAuth({ children }) {
   const { user } = useAuth();
   const location = useLocation();
@@ -30,6 +41,7 @@ function App() {
     <AuthProvider>
       <div className="App">
         <BrowserRouter>
+          <TitleSetter />
           <Toaster theme="dark" position="top-right" />
           <Routes>
             <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
@@ -57,8 +69,5 @@ function App() {
     </AuthProvider>
   );
 }
-
-// Use URL to distinguish kapal vs pangkalan detail page
-// (We re-extract type from route param in AssetDetail if needed.)
 
 export default App;
