@@ -5,7 +5,7 @@ import { StatusBadge, ReadinessBar, PanelCard } from "../components/Tactical";
 import ShipViewer3D from "../components/ShipViewer3D";
 import LogisticsTank from "../components/LogisticsTank";
 import {
-  ArrowLeft, Edit, Trash2, Brain, Anchor, MapPin, User, Ship, Building2, Users, Radar, Target,
+  ArrowLeft, Edit, Trash2, Brain, Anchor, MapPin, User, Ship, Building2, Users, Radar, Target, Save, PencilLine,
 } from "lucide-react";
 import { motion } from "framer-motion";
 
@@ -21,6 +21,24 @@ export default function AssetDetail() {
 
   const canEdit = true;
   const canDelete = true;
+  const [editBasic, setEditBasic] = useState(false);
+  const [basicForm, setBasicForm] = useState({ description: "", location: "", commander: "" });
+
+  const startEditBasic = () => {
+    setBasicForm({
+      description: asset?.description || "",
+      location: asset?.location || "",
+      commander: asset?.commander || "",
+    });
+    setEditBasic(true);
+  };
+
+  const saveBasic = async () => {
+    const payload = { ...asset, ...basicForm };
+    const { data } = await api.put(`/assets/${id}`, payload);
+    setAsset(data);
+    setEditBasic(false);
+  };
 
   const load = () => {
     setLoading(true);
@@ -101,13 +119,23 @@ export default function AssetDetail() {
 
         <div className="flex gap-2">
           {canEdit && (
-            <button
-              onClick={() => navigate(`/${type}/${id}/edit`)}
-              data-testid="edit-btn"
-              className="tactical-btn flex items-center gap-2"
-            >
-              <Edit size={14} /> EDIT
-            </button>
+            <>
+              <button
+                onClick={startEditBasic}
+                data-testid="edit-basic-btn"
+                className="tactical-btn flex items-center gap-2"
+                title="Edit info dasar inline"
+              >
+                <PencilLine size={14} /> EDIT INFO
+              </button>
+              <button
+                onClick={() => navigate(`/${type}/${id}/edit`)}
+                data-testid="edit-btn"
+                className="tactical-btn tactical-btn-primary flex items-center gap-2"
+              >
+                <Edit size={14} /> ISI / EDIT DATA LENGKAP
+              </button>
+            </>
           )}
           {canDelete && (
             <button
@@ -120,6 +148,61 @@ export default function AssetDetail() {
           )}
         </div>
       </div>
+
+      {/* Inline Basic Info Editor */}
+      {editBasic && (
+        <div className="mb-6 border border-[#00E5FF] bg-[#00E5FF]/5 p-5" data-testid="basic-editor">
+          <div className="label-mono text-[#00E5FF] mb-4 flex items-center gap-2">
+            <PencilLine size={12} /> EDIT INFO DASAR
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+            <div>
+              <label className="label-mono block mb-1">Lokasi</label>
+              <input
+                value={basicForm.location}
+                onChange={(e) => setBasicForm({ ...basicForm, location: e.target.value })}
+                data-testid="basic-location"
+                className="w-full bg-[#050608] border border-[#212530] px-3 py-2 text-sm focus:border-[#00E5FF] focus:outline-none mono"
+              />
+            </div>
+            <div>
+              <label className="label-mono block mb-1">Komandan</label>
+              <input
+                value={basicForm.commander}
+                onChange={(e) => setBasicForm({ ...basicForm, commander: e.target.value })}
+                data-testid="basic-commander"
+                className="w-full bg-[#050608] border border-[#212530] px-3 py-2 text-sm focus:border-[#00E5FF] focus:outline-none mono"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="label-mono block mb-1">Deskripsi</label>
+              <textarea
+                rows="3"
+                value={basicForm.description}
+                onChange={(e) => setBasicForm({ ...basicForm, description: e.target.value })}
+                data-testid="basic-description"
+                className="w-full bg-[#050608] border border-[#212530] px-3 py-2 text-sm focus:border-[#00E5FF] focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveBasic}
+              data-testid="basic-save"
+              className="tactical-btn tactical-btn-primary flex items-center gap-2"
+            >
+              <Save size={14} /> SIMPAN
+            </button>
+            <button
+              onClick={() => setEditBasic(false)}
+              data-testid="basic-cancel"
+              className="tactical-btn"
+            >
+              BATAL
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}

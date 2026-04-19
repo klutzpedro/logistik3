@@ -73,6 +73,7 @@ export default function AssetList({ type }) {
             <motion.div
               key={a.id}
               variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+              className="relative group/card"
             >
               <Link
                 to={`/${type}/${a.id}`}
@@ -99,6 +100,15 @@ export default function AssetList({ type }) {
                   <ReadinessBar value={a.readiness_percentage} label="READINESS" />
                 </div>
               </Link>
+              {canEdit && (
+                <button
+                  onClick={(e) => { e.preventDefault(); navigate(`/${type}/${a.id}/edit`); }}
+                  data-testid={`edit-card-${a.code}`}
+                  className="absolute top-3 left-3 px-2 py-1 text-[10px] mono uppercase tracking-wider border border-[#00E5FF] bg-[#050608]/80 text-[#00E5FF] opacity-0 group-hover/card:opacity-100 hover:bg-[#00E5FF] hover:text-[#050608] transition-all flex items-center gap-1 z-10"
+                >
+                  <Plus size={10} className="rotate-0" style={{ transform: "none" }} /> EDIT
+                </button>
+              )}
             </motion.div>
           ))}
         </motion.div>
