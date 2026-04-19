@@ -8,12 +8,10 @@ import {
   ArrowLeft, Edit, Trash2, Brain, Anchor, MapPin, User, Ship, Building2, Users, Radar, Target,
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useAuth } from "../context/AuthContext";
 
 export default function AssetDetail() {
   const { id, type } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [asset, setAsset] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
@@ -21,8 +19,8 @@ export default function AssetDetail() {
   const [aiResult, setAiResult] = useState("");
   const [displayedText, setDisplayedText] = useState("");
 
-  const canEdit = user?.role === "admin" || user?.role === "operator";
-  const canDelete = user?.role === "admin";
+  const canEdit = true;
+  const canDelete = true;
 
   const load = () => {
     setLoading(true);
@@ -222,8 +220,20 @@ export default function AssetDetail() {
 
         {/* Right column */}
         <div className="space-y-6">
-          {/* Readiness */}
-          <PanelCard title="KESIAPAN OPERASIONAL" testid="readiness-panel">
+          {/* Readiness + Quick Edit */}
+          <PanelCard
+            title="KESIAPAN OPERASIONAL"
+            testid="readiness-panel"
+            right={
+              <button
+                onClick={() => navigate(`/${type}/${id}/edit`)}
+                data-testid="quick-edit-full-btn"
+                className="label-mono text-[#00E5FF] hover:text-white"
+              >
+                [ EDIT LENGKAP → ]
+              </button>
+            }
+          >
             <div className="text-center py-4">
               <div className="heading text-6xl font-bold" style={{
                 color: asset.readiness_percentage >= 80 ? "#00E676" : asset.readiness_percentage >= 50 ? "#FFC400" : "#FF3D00"
@@ -232,15 +242,108 @@ export default function AssetDetail() {
               </div>
               <div className="label-mono mt-2">READINESS SCORE</div>
             </div>
-            <ReadinessBar value={asset.readiness_percentage} />
+
+            {/* Quick status setter */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {[
+                { k: "siap", label: "SIAP", c: "#00E676" },
+                { k: "siap_terbatas", label: "TERBATAS", c: "#FFC400" },
+                { k: "tidak_siap", label: "TIDAK SIAP", c: "#FF3D00" },
+              ].map((s) => (
+                <button
+                  key={s.k}
+                  data-testid={`quick-konis-${s.k}`}
+                  onClick={async () => {
+                    const { data } = await api.patch(`/assets/${id}/konis`, { konis_status: s.k });
+                    setAsset(data);
+                  }}
+                  className="py-2 text-[10px] mono uppercase tracking-wider border transition-all"
+                  style={{
+                    borderColor: asset.konis_status === s.k ? s.c : "#212530",
+                    color: asset.konis_status === s.k ? s.c : "#8A94A6",
+                    background: asset.konis_status === s.k ? `${s.c}1A` : "transparent",
+                    boxShadow: asset.konis_status === s.k ? `0 0 12px ${s.c}66` : "none",
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Quick readiness slider */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="label-mono">READINESS</span>
+                <span className="mono text-xs text-[#00E5FF]">{asset.readiness_percentage}%</span>
+              </div>
+              <input
+                type="range" min="0" max="100" step="1"
+                value={asset.readiness_percentage}
+                data-testid="quick-readiness-slider"
+                onChange={(e) => setAsset({ ...asset, readiness_percentage: Number(e.target.value) })}
+                onMouseUp={async (e) => {
+                  const { data } = await api.patch(`/assets/${id}/konis`, { readiness_percentage: Number(e.target.value) });
+                  setAsset(data);
+                }}
+                onTouchEnd={async (e) => {
+                  const { data } = await api.patch(`/assets/${id}/konis`, { readiness_percentage: asset.readiness_percentage });
+                  setAsset(data);
+                }}
+                className="w-full accent-[#00E5FF]"
+              />
+              <ReadinessBar value={asset.readiness_percentage} />
+            </div>
           </PanelCard>
 
-          {/* Logistics */}
-          <PanelCard title="KONDISI LOGISTIK" testid="logistics-panel">
-            <div className="grid grid-cols-2 gap-2">
+          {/* Logistics with inline edit */}
+          <PanelCard
+            title="KONDISI LOGISTIK"
+            testid="logistics-panel"
+            right={
+              <button
+                onClick={async () => {
+                  const { data } = await api.patch(`/assets/${id}/logistics`, asset.logistics);
+                  setAsset(data);
+                }}
+                data-testid="save-logistics-btn"
+                className="label-mono text-[#00E5FF] hover:text-white"
+              >
+                [ SIMPAN ]
+              </button>
+            }
+          >
+            <div className="grid grid-cols-2 gap-2 mb-3">
               {Object.entries(asset.logistics || {}).map(([k, v]) => (
                 <LogisticsTank key={k} type={k} value={v} />
               ))}
+            </div>
+            <div className="space-y-2 border-t border-[#212530] pt-3">
+              {Object.entries(asset.logistics || {}).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-2">
+                  <span className="label-mono w-32 truncate">{k.replace(/_/g, " ")}</span>
+                  <input
+                    type="range" min="0" max="100" step="1"
+                    value={v}
+                    data-testid={`slider-${k}`}
+                    onChange={(e) =>
+                      setAsset({ ...asset, logistics: { ...asset.logistics, [k]: Number(e.target.value) } })
+                    }
+                    className="flex-1 accent-[#00E5FF]"
+                  />
+                  <input
+                    type="number" min="0" max="100"
+                    value={v}
+                    data-testid={`num-${k}`}
+                    onChange={(e) =>
+                      setAsset({ ...asset, logistics: { ...asset.logistics, [k]: Number(e.target.value) } })
+                    }
+                    className="w-16 bg-[#050608] border border-[#212530] px-2 py-1 text-xs text-right mono focus:border-[#00E5FF] focus:outline-none"
+                  />
+                </div>
+              ))}
+              <div className="text-xs text-[#8A94A6] mono pt-2">
+                * Klik [SIMPAN] di atas untuk mengirim perubahan.
+              </div>
             </div>
           </PanelCard>
 

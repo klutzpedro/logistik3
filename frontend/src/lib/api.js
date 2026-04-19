@@ -3,24 +3,19 @@ import axios from "axios";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
 
-export const api = axios.create({ baseURL: API });
-
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("koarmada_token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
+export const api = axios.create({
+  baseURL: API,
+  withCredentials: true, // send session cookie
 });
 
 api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err.response?.status === 401) {
-      localStorage.removeItem("koarmada_token");
-      localStorage.removeItem("koarmada_user");
-      if (!window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login";
+      // Session expired / invalid — reload to trigger gatekeeper redirect
+      if (!window.__blockReload) {
+        window.__blockReload = true;
+        setTimeout(() => window.location.reload(), 300);
       }
     }
     return Promise.reject(err);

@@ -1,7 +1,7 @@
 import React from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { LayoutDashboard, Ship, Building2, Brain, LogOut, Anchor, Radar } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { LayoutDashboard, Ship, Building2, Brain, Anchor, Radar, LogOut } from "lucide-react";
+import { api } from "../lib/api";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
@@ -11,18 +11,19 @@ const navItems = [
 ];
 
 export default function Layout({ children }) {
-  const { user, logout } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login");
+  const handleExit = async () => {
+    try {
+      const { data } = await api.post("/sso/logout");
+      window.location.href = data?.redirect || "https://k3ics.online";
+    } catch {
+      window.location.href = "https://k3ics.online";
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#050608] flex text-[#F1F5F9]">
-      {/* Sidebar */}
       <aside className="w-64 border-r border-[#212530] bg-[#080A0E] flex flex-col sticky top-0 h-screen" data-testid="sidebar">
         <div className="p-6 border-b border-[#212530] relative overflow-hidden">
           <div className="flex items-center gap-3">
@@ -30,8 +31,8 @@ export default function Layout({ children }) {
               <Anchor size={20} className="text-[#00E5FF]" />
             </div>
             <div>
-              <div className="heading text-lg font-bold leading-none glow-cyan text-[#00E5FF]">KOARMADA 3</div>
-              <div className="label-mono mt-1">TACTICAL OPS</div>
+              <div className="heading text-lg font-bold leading-none glow-cyan text-[#00E5FF]">LOGISTIC3</div>
+              <div className="label-mono mt-1">KOARMADA 3 OPS</div>
             </div>
           </div>
         </div>
@@ -61,21 +62,19 @@ export default function Layout({ children }) {
 
         <div className="p-4 border-t border-[#212530]">
           <div className="mb-3">
-            <div className="label-mono">User</div>
-            <div className="text-sm font-medium mt-1 truncate" data-testid="user-name">{user?.name}</div>
-            <div className="text-xs text-[#00E5FF] mono uppercase mt-0.5" data-testid="user-role">{user?.role}</div>
+            <div className="label-mono">Session</div>
+            <div className="text-xs text-[#00E5FF] mono mt-1">via K3ICS.ONLINE</div>
           </div>
           <button
-            onClick={handleLogout}
-            data-testid="logout-btn"
-            className="tactical-btn tactical-btn-danger w-full flex items-center justify-center gap-2"
+            onClick={handleExit}
+            data-testid="exit-btn"
+            className="tactical-btn w-full flex items-center justify-center gap-2"
           >
-            <LogOut size={14} /> Logout
+            <LogOut size={14} /> Kembali ke K3ICS
           </button>
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 border-b border-[#212530] bg-[#080A0E]/80 backdrop-blur-sm z-10 px-8 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">

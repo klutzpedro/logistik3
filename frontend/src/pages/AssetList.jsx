@@ -4,15 +4,13 @@ import { api } from "../lib/api";
 import { StatusBadge, ReadinessBar } from "../components/Tactical";
 import { Plus, Search, Ship, Building2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useAuth } from "../context/AuthContext";
 
 export default function AssetList({ type }) {
   const [assets, setAssets] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const canEdit = user?.role === "admin" || user?.role === "operator";
+  const canEdit = true;
 
   useEffect(() => {
     setLoading(true);

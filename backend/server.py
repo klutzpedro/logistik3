@@ -1,16 +1,18 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import hmac
+import hashlib
+import time
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 from typing import List, Optional, Literal, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
-import bcrypt
 import jwt as pyjwt
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -22,53 +24,34 @@ MONGO_URL = os.environ['MONGO_URL']
 DB_NAME = os.environ['DB_NAME']
 JWT_SECRET = os.environ['JWT_SECRET']
 EMERGENT_LLM_KEY = os.environ['EMERGENT_LLM_KEY']
+
+# SSO Configuration
+SSO_SECRET = os.environ.get('SSO_SECRET', 'CHANGE-ME-SHARED-WITH-K3ICS')
+SSO_TOKEN_MAX_AGE = int(os.environ.get('SSO_TOKEN_MAX_AGE', '300'))  # 5 minutes
+SESSION_HOURS = int(os.environ.get('SESSION_HOURS', '8'))
+K3ICS_LOGIN_URL = os.environ.get('K3ICS_LOGIN_URL', 'https://k3ics.online')
+COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'true').lower() == 'true'
+COOKIE_NAME = 'logistic3_session'
+
 JWT_ALGO = "HS256"
-JWT_EXPIRE_HOURS = 24 * 7
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
 
-app = FastAPI(title="Koarmada 3 Logistics Monitor")
+app = FastAPI(title="Logistic3 - Koarmada 3 Logistics Monitor")
 api_router = APIRouter(prefix="/api")
-security = HTTPBearer()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 # =========== MODELS ===========
-UserRole = Literal["admin", "operator", "viewer"]
 AssetType = Literal["kapal", "pangkalan"]
 KonisStatus = Literal["siap", "siap_terbatas", "tidak_siap"]
 
 
-class UserRegister(BaseModel):
-    email: EmailStr
-    password: str
-    name: str
-    role: UserRole = "viewer"
-
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-
-class UserOut(BaseModel):
-    id: str
-    email: str
-    name: str
-    role: UserRole
-
-
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: UserOut
-
-
 class Logistics(BaseModel):
-    bahan_bakar: float = 0  # percentage 0-100
+    bahan_bakar: float = 0
     air_bersih: float = 0
     fresh_room: float = 0
     minyak_lincir: float = 0
@@ -81,7 +64,7 @@ class Personnel(BaseModel):
     name: str
     rank: str
     position: str
-    photo: Optional[str] = None  # base64
+    photo: Optional[str] = None
 
 
 class WeaponSystem(BaseModel):
@@ -98,7 +81,7 @@ class AssetCreate(BaseModel):
     code: str
     description: str = ""
     specifications: Dict[str, Any] = Field(default_factory=dict)
-    images: List[str] = Field(default_factory=list)  # base64 strings
+    images: List[str] = Field(default_factory=list)
     konis_status: KonisStatus = "siap"
     readiness_percentage: float = 100
     logistics: Logistics = Field(default_factory=Logistics)
@@ -125,87 +108,105 @@ class AIAnalysisResponse(BaseModel):
     timestamp: datetime
 
 
-# =========== AUTH HELPERS ===========
-def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-
-
-def verify_password(password: str, hashed: str) -> bool:
+# =========== SSO (HMAC) ===========
+def verify_sso_token(token: str) -> bool:
+    """Verify HMAC SSO token from k3ics.online.
+    Token format: <unix_timestamp>.<hex_hmac_sha256>
+    Signature = HMAC_SHA256(SSO_SECRET, str(timestamp))
+    Rejected if older than SSO_TOKEN_MAX_AGE seconds.
+    """
     try:
-        return bcrypt.checkpw(password.encode(), hashed.encode())
+        ts_str, sig = token.split('.', 1)
+        ts = int(ts_str)
     except Exception:
         return False
 
+    now = int(time.time())
+    if abs(now - ts) > SSO_TOKEN_MAX_AGE:
+        return False
 
-def create_token(user_id: str, role: str) -> str:
+    expected = hmac.new(SSO_SECRET.encode(), ts_str.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig.lower())
+
+
+def create_session_cookie_value() -> str:
     payload = {
-        "sub": user_id,
-        "role": role,
-        "exp": datetime.now(timezone.utc) + timedelta(hours=JWT_EXPIRE_HOURS),
+        "via": "sso",
+        "iat": int(time.time()),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=SESSION_HOURS),
     }
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
 
-async def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+def is_session_valid(request: Request) -> bool:
+    cookie = request.cookies.get(COOKIE_NAME)
+    if not cookie:
+        return False
     try:
-        payload = pyjwt.decode(creds.credentials, JWT_SECRET, algorithms=[JWT_ALGO])
-        user_id = payload.get("sub")
-        user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
-        if not user:
-            raise HTTPException(status_code=401, detail="User tidak ditemukan")
-        return user
-    except pyjwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token kadaluarsa")
-    except pyjwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token tidak valid")
+        pyjwt.decode(cookie, JWT_SECRET, algorithms=[JWT_ALGO])
+        return True
+    except Exception:
+        return False
 
 
-def require_role(*roles: str):
-    async def checker(user: dict = Depends(get_current_user)):
-        if user["role"] not in roles:
-            raise HTTPException(status_code=403, detail="Akses ditolak")
-        return user
-    return checker
+def require_session(request: Request):
+    """Dependency: reject requests without a valid session cookie."""
+    if not is_session_valid(request):
+        raise HTTPException(status_code=401, detail="Session tidak valid. Silakan akses melalui k3ics.online.")
+    return True
 
 
-# =========== AUTH ROUTES ===========
-@api_router.post("/auth/register", response_model=TokenResponse)
-async def register(data: UserRegister):
-    existing = await db.users.find_one({"email": data.email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email sudah terdaftar")
-    user_id = str(uuid.uuid4())
-    doc = {
-        "id": user_id,
-        "email": data.email,
-        "name": data.name,
-        "role": data.role,
-        "password_hash": hash_password(data.password),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+# =========== SSO ROUTES ===========
+@api_router.get("/sso/enter")
+async def sso_enter(sso: str, response: Response):
+    """User lands here with ?sso=timestamp.hmac from k3ics.online."""
+    if not verify_sso_token(sso):
+        raise HTTPException(status_code=401, detail="Token SSO tidak valid atau sudah kadaluarsa")
+
+    cookie_value = create_session_cookie_value()
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=cookie_value,
+        max_age=SESSION_HOURS * 3600,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    return {"success": True, "message": "Session aktif", "expires_in_hours": SESSION_HOURS}
+
+
+@api_router.post("/sso/enter")
+async def sso_enter_post(payload: dict, response: Response):
+    sso = payload.get("sso", "")
+    if not verify_sso_token(sso):
+        raise HTTPException(status_code=401, detail="Token SSO tidak valid atau sudah kadaluarsa")
+
+    cookie_value = create_session_cookie_value()
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=cookie_value,
+        max_age=SESSION_HOURS * 3600,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    return {"success": True, "message": "Session aktif", "expires_in_hours": SESSION_HOURS}
+
+
+@api_router.get("/sso/check")
+async def sso_check(request: Request):
+    return {
+        "authorized": is_session_valid(request),
+        "login_url": K3ICS_LOGIN_URL,
     }
-    await db.users.insert_one(doc)
-    token = create_token(user_id, data.role)
-    return TokenResponse(
-        access_token=token,
-        user=UserOut(id=user_id, email=data.email, name=data.name, role=data.role),
-    )
 
 
-@api_router.post("/auth/login", response_model=TokenResponse)
-async def login(data: UserLogin):
-    user = await db.users.find_one({"email": data.username}, {"_id": 0})
-    if not user or not verify_password(data.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Username atau password salah")
-    token = create_token(user["id"], user["role"])
-    return TokenResponse(
-        access_token=token,
-        user=UserOut(id=user["id"], email=user["email"], name=user["name"], role=user["role"]),
-    )
-
-
-@api_router.get("/auth/me", response_model=UserOut)
-async def me(user: dict = Depends(get_current_user)):
-    return UserOut(id=user["id"], email=user["email"], name=user["name"], role=user["role"])
+@api_router.post("/sso/logout")
+async def sso_logout(response: Response):
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return {"success": True, "redirect": K3ICS_LOGIN_URL}
 
 
 # =========== ASSET ROUTES ===========
@@ -221,14 +222,14 @@ def _serialize_asset_doc(doc: dict) -> dict:
 
 
 @api_router.get("/assets", response_model=List[Asset])
-async def list_assets(type: Optional[AssetType] = None, user: dict = Depends(get_current_user)):
+async def list_assets(type: Optional[AssetType] = None, _=Depends(require_session)):
     q = {"type": type} if type else {}
     docs = await db.assets.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [Asset(**_serialize_asset_doc(d)) for d in docs]
 
 
 @api_router.get("/assets/{asset_id}", response_model=Asset)
-async def get_asset(asset_id: str, user: dict = Depends(get_current_user)):
+async def get_asset(asset_id: str, _=Depends(require_session)):
     doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
@@ -236,7 +237,7 @@ async def get_asset(asset_id: str, user: dict = Depends(get_current_user)):
 
 
 @api_router.post("/assets", response_model=Asset)
-async def create_asset(data: AssetCreate, user: dict = Depends(require_role("admin", "operator"))):
+async def create_asset(data: AssetCreate, _=Depends(require_session)):
     asset = Asset(**data.model_dump())
     doc = asset.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
@@ -246,7 +247,7 @@ async def create_asset(data: AssetCreate, user: dict = Depends(require_role("adm
 
 
 @api_router.put("/assets/{asset_id}", response_model=Asset)
-async def update_asset(asset_id: str, data: AssetCreate, user: dict = Depends(require_role("admin", "operator"))):
+async def update_asset(asset_id: str, data: AssetCreate, _=Depends(require_session)):
     existing = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
@@ -258,16 +259,47 @@ async def update_asset(asset_id: str, data: AssetCreate, user: dict = Depends(re
 
 
 @api_router.delete("/assets/{asset_id}")
-async def delete_asset(asset_id: str, user: dict = Depends(require_role("admin"))):
+async def delete_asset(asset_id: str, _=Depends(require_session)):
     result = await db.assets.delete_one({"id": asset_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
     return {"success": True}
 
 
-# =========== DASHBOARD ROUTES ===========
+# =========== QUICK STATUS UPDATE ENDPOINTS (for inline edit) ===========
+class QuickKonisUpdate(BaseModel):
+    konis_status: Optional[KonisStatus] = None
+    readiness_percentage: Optional[float] = None
+
+
+@api_router.patch("/assets/{asset_id}/konis", response_model=Asset)
+async def update_konis(asset_id: str, data: QuickKonisUpdate, _=Depends(require_session)):
+    existing = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
+    patch = {k: v for k, v in data.model_dump().items() if v is not None}
+    patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.assets.update_one({"id": asset_id}, {"$set": patch})
+    new_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    return Asset(**_serialize_asset_doc(new_doc))
+
+
+@api_router.patch("/assets/{asset_id}/logistics", response_model=Asset)
+async def update_logistics(asset_id: str, data: Logistics, _=Depends(require_session)):
+    existing = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
+    await db.assets.update_one(
+        {"id": asset_id},
+        {"$set": {"logistics": data.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    new_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    return Asset(**_serialize_asset_doc(new_doc))
+
+
+# =========== DASHBOARD ===========
 @api_router.get("/dashboard/stats")
-async def dashboard_stats(user: dict = Depends(get_current_user)):
+async def dashboard_stats(_=Depends(require_session)):
     assets = await db.assets.find({}, {"_id": 0}).to_list(1000)
     total_kapal = sum(1 for a in assets if a["type"] == "kapal")
     total_pangkalan = sum(1 for a in assets if a["type"] == "pangkalan")
@@ -281,14 +313,12 @@ async def dashboard_stats(user: dict = Depends(get_current_user)):
         if assets else 0
     )
 
-    # Logistics averages for ships
     kapal = [a for a in assets if a["type"] == "kapal"]
     logistics_avg = {}
     if kapal:
         for key in ("bahan_bakar", "air_bersih", "fresh_room", "minyak_lincir", "amunisi", "ransum"):
             logistics_avg[key] = sum(a.get("logistics", {}).get(key, 0) for a in kapal) / len(kapal)
 
-    # Readiness per asset (for bar chart)
     readiness_list = [
         {"name": a["name"], "code": a["code"], "readiness": a.get("readiness_percentage", 0),
          "status": a.get("konis_status", "siap"), "type": a["type"]}
@@ -308,7 +338,7 @@ async def dashboard_stats(user: dict = Depends(get_current_user)):
 
 # =========== AI ANALYSIS ===========
 @api_router.post("/ai-analysis", response_model=AIAnalysisResponse)
-async def ai_analysis(req: AIAnalysisRequest, user: dict = Depends(get_current_user)):
+async def ai_analysis(req: AIAnalysisRequest, _=Depends(require_session)):
     asset = await db.assets.find_one({"id": req.asset_id}, {"_id": 0})
     if not asset:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
@@ -374,39 +404,15 @@ Gunakan bahasa Indonesia militer yang profesional. Maksimal 300 kata.
         analysis=response_text,
         timestamp=datetime.now(timezone.utc),
     )
-    # Save to history
     await db.ai_analyses.insert_one({
         **result.model_dump(),
         "timestamp": result.timestamp.isoformat(),
-        "user_id": user["id"],
     })
     return result
 
 
-@api_router.get("/ai-analysis/history/{asset_id}")
-async def ai_history(asset_id: str, user: dict = Depends(get_current_user)):
-    history = await db.ai_analyses.find({"asset_id": asset_id}, {"_id": 0}).sort("timestamp", -1).limit(20).to_list(20)
-    return history
-
-
 # =========== SEEDING ===========
 async def seed_initial_data():
-    # Ensure admin user exists (reset to default password on every startup for single-admin mode)
-    admin_email = "admin"
-    admin_password = "Paparoni83#"
-    existing_admin = await db.users.find_one({"email": admin_email})
-    if not existing_admin:
-        await db.users.delete_many({})  # clear any legacy seed users
-        await db.users.insert_one({
-            "id": str(uuid.uuid4()),
-            "email": admin_email,
-            "name": "Panglima Koarmada 3",
-            "role": "admin",
-            "password_hash": hash_password(admin_password),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        logger.info("Admin user seeded.")
-
     assets_count = await db.assets.count_documents({})
     if assets_count == 0:
         logger.info("Seeding dummy assets...")
@@ -443,7 +449,6 @@ async def seed_initial_data():
                 "weapon_systems": [
                     {"id": str(uuid.uuid4()), "name": "Meriam OTO Melara 76mm", "type": "Main Gun", "status": "siap", "notes": ""},
                     {"id": str(uuid.uuid4()), "name": "Rudal Exocet MM40", "type": "SSM", "status": "siap_terbatas", "notes": "Butuh pemeliharaan"},
-                    {"id": str(uuid.uuid4()), "name": "Sonar Thales Kingklip", "type": "Sonar", "status": "siap", "notes": ""},
                 ],
                 "location": "Lantamal XIV Sorong", "commander": "Letkol Laut (P) Bayu Saputra",
             },
@@ -456,71 +461,61 @@ async def seed_initial_data():
                 "logistics": {"bahan_bakar": 78, "air_bersih": 85, "fresh_room": 88, "minyak_lincir": 75, "amunisi": 90, "ransum": 82},
                 "weapon_systems": [
                     {"id": str(uuid.uuid4()), "name": "Meriam BAE 76mm Super Rapid", "type": "Main Gun", "status": "siap", "notes": ""},
-                    {"id": str(uuid.uuid4()), "name": "Rudal MBDA Exocet MM40", "type": "SSM", "status": "siap", "notes": ""},
-                    {"id": str(uuid.uuid4()), "name": "Rudal MBDA Seawolf", "type": "SAM", "status": "siap", "notes": ""},
                 ],
                 "location": "Lantamal XIV Sorong", "commander": "Letkol Laut (P) Candra Adi",
             },
             {
                 "type": "kapal", "name": "KRI Nanggala", "code": "402",
-                "description": "Kapal selam serangan kelas Cakra. Simulasi unit 3D viewer.",
+                "description": "Kapal selam serangan kelas Cakra.",
                 "specifications": {"kelas": "Type 209/1300", "panjang": "59.5 m", "lebar": "6.3 m", "kecepatan_maks": "21.5 knot bawah air", "awak": 34, "dibuat": "1981"},
                 "images": [ship_img_3],
                 "konis_status": "tidak_siap", "readiness_percentage": 25,
                 "logistics": {"bahan_bakar": 30, "air_bersih": 20, "fresh_room": 40, "minyak_lincir": 25, "amunisi": 60, "ransum": 35},
                 "weapon_systems": [
                     {"id": str(uuid.uuid4()), "name": "Torpedo AEG SUT", "type": "Heavy Torpedo", "status": "tidak_siap", "notes": "Overhaul"},
-                    {"id": str(uuid.uuid4()), "name": "Sonar CSU-3", "type": "Sonar", "status": "siap_terbatas", "notes": "Kalibrasi diperlukan"},
                 ],
                 "location": "Fasharkan Manokwari", "commander": "Letkol Laut (P) Dharma Wijaya",
             },
             {
                 "type": "kapal", "name": "KRI Banda Aceh", "code": "593",
-                "description": "Kapal Angkut Tank (LPD) kelas Makassar, peran amfibi & HADR.",
+                "description": "Kapal Angkut Tank (LPD) kelas Makassar.",
                 "specifications": {"kelas": "Makassar LPD", "panjang": "125 m", "lebar": "22 m", "kecepatan_maks": "15 knot", "awak": 126, "dibuat": "2011"},
                 "images": [ship_img_1, ship_img_2],
                 "konis_status": "siap", "readiness_percentage": 88,
                 "logistics": {"bahan_bakar": 92, "air_bersih": 85, "fresh_room": 80, "minyak_lincir": 88, "amunisi": 75, "ransum": 90},
                 "weapon_systems": [
                     {"id": str(uuid.uuid4()), "name": "Meriam Bofors 40mm", "type": "AA Gun", "status": "siap", "notes": ""},
-                    {"id": str(uuid.uuid4()), "name": "Helipad Dual Heli", "type": "Aviation", "status": "siap", "notes": "Dapat membawa 2 heli"},
                 ],
                 "location": "Lantamal XIV Sorong", "commander": "Kolonel Laut (P) Erlangga Jaya",
             },
             {
                 "type": "pangkalan", "name": "Lantamal XIV Sorong", "code": "LTM-XIV",
                 "description": "Pangkalan Utama TNI AL wilayah Papua Barat Daya, pusat operasi Koarmada 3.",
-                "specifications": {"luas_area": "120 ha", "dermaga": "4 unit", "kapasitas_kapal": "12 kapal", "runway_heli": "Ya", "bengkel": "Kelas B"},
+                "specifications": {"luas_area": "120 ha", "dermaga": "4 unit", "kapasitas_kapal": "12 kapal"},
                 "images": [base_img],
                 "konis_status": "siap", "readiness_percentage": 94,
                 "logistics": {"bahan_bakar": 95, "air_bersih": 92, "fresh_room": 88, "minyak_lincir": 90, "amunisi": 96, "ransum": 85},
                 "personnel": [
                     {"id": str(uuid.uuid4()), "name": "Laksamana Pertama Adhi Wibowo", "rank": "Laksma TNI", "position": "Komandan Lantamal XIV", "photo": officer_1},
                     {"id": str(uuid.uuid4()), "name": "Kolonel Laut Bagas Prakoso", "rank": "Kolonel", "position": "Kepala Staf", "photo": officer_2},
-                    {"id": str(uuid.uuid4()), "name": "Letkol Laut Candra Adi", "rank": "Letkol", "position": "Pamen Operasi", "photo": officer_1},
-                    {"id": str(uuid.uuid4()), "name": "Mayor Laut Dharma Wijaya", "rank": "Mayor", "position": "Pamen Logistik", "photo": officer_2},
                 ],
                 "weapon_systems": [
                     {"id": str(uuid.uuid4()), "name": "Coastal Radar CRS-300", "type": "Radar", "status": "siap", "notes": ""},
-                    {"id": str(uuid.uuid4()), "name": "Meriam Pantai 40mm", "type": "Coastal Gun", "status": "siap", "notes": ""},
                 ],
                 "location": "Sorong, Papua Barat Daya", "commander": "Laksma TNI Adhi Wibowo",
             },
             {
                 "type": "pangkalan", "name": "Fasharkan Manokwari", "code": "FSH-MKW",
                 "description": "Fasilitas Pemeliharaan dan Perbaikan kapal wilayah Teluk Cendrawasih.",
-                "specifications": {"luas_area": "45 ha", "dermaga": "2 unit", "graving_dock": "1 unit", "kapasitas_kapal": "6 kapal", "bengkel": "Kelas C"},
+                "specifications": {"luas_area": "45 ha", "dermaga": "2 unit", "graving_dock": "1 unit"},
                 "images": [base_img],
                 "konis_status": "siap_terbatas", "readiness_percentage": 72,
                 "logistics": {"bahan_bakar": 68, "air_bersih": 75, "fresh_room": 70, "minyak_lincir": 65, "amunisi": 80, "ransum": 72},
                 "personnel": [
                     {"id": str(uuid.uuid4()), "name": "Kolonel Laut Erlangga Jaya", "rank": "Kolonel", "position": "Komandan Fasharkan", "photo": officer_1},
-                    {"id": str(uuid.uuid4()), "name": "Letkol Laut Fadli Hidayat", "rank": "Letkol", "position": "Kepala Bengkel", "photo": officer_2},
-                    {"id": str(uuid.uuid4()), "name": "Mayor Laut Gunawan Santoso", "rank": "Mayor", "position": "Pamen Teknik", "photo": officer_1},
                 ],
                 "weapon_systems": [
                     {"id": str(uuid.uuid4()), "name": "Crane Dermaga 50T", "type": "Support", "status": "siap", "notes": ""},
-                    {"id": str(uuid.uuid4()), "name": "Graving Dock", "type": "Maintenance", "status": "siap_terbatas", "notes": "Butuh overhaul pintu"},
                 ],
                 "location": "Manokwari, Papua Barat", "commander": "Kolonel Laut Erlangga Jaya",
             },
@@ -547,15 +542,17 @@ async def shutdown_db_client():
 
 @api_router.get("/")
 async def root():
-    return {"message": "Koarmada 3 Logistics Monitoring API", "status": "operational"}
+    return {"message": "Logistic3 API", "status": "operational"}
 
 
 app.include_router(api_router)
 
+# CORS: must allow credentials for cookie-based session
+allowed_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

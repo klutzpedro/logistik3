@@ -1,15 +1,13 @@
 import { useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import AssetList from "./pages/AssetList";
 import AssetDetail from "./pages/AssetDetail";
 import AssetForm from "./pages/AssetForm";
 import AIAnalysis from "./pages/AIAnalysis";
 import Layout from "./components/Layout";
+import Gatekeeper from "./components/Gatekeeper";
 import { Toaster } from "sonner";
 
 function TitleSetter() {
@@ -23,50 +21,36 @@ function TitleSetter() {
   return null;
 }
 
-function RequireAuth({ children }) {
-  const { user } = useAuth();
-  const location = useLocation();
-  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
-  return <Layout>{children}</Layout>;
-}
-
-function RedirectIfAuthed({ children }) {
-  const { user } = useAuth();
-  if (user) return <Navigate to="/dashboard" replace />;
-  return children;
-}
-
 function App() {
   return (
-    <AuthProvider>
-      <div className="App">
-        <BrowserRouter>
-          <TitleSetter />
-          <Toaster theme="dark" position="top-right" />
-          <Routes>
-            <Route path="/login" element={<RedirectIfAuthed><Login /></RedirectIfAuthed>} />
-            <Route path="/register" element={<RedirectIfAuthed><Register /></RedirectIfAuthed>} />
+    <div className="App">
+      <BrowserRouter>
+        <TitleSetter />
+        <Toaster theme="dark" position="top-right" />
+        <Gatekeeper>
+          <Layout>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
 
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+              <Route path="/kapal" element={<AssetList type="kapal" />} />
+              <Route path="/kapal/new" element={<AssetForm type="kapal" />} />
+              <Route path="/kapal/:id" element={<AssetDetail type="kapal" />} />
+              <Route path="/kapal/:id/edit" element={<AssetForm type="kapal" />} />
 
-            <Route path="/kapal" element={<RequireAuth><AssetList type="kapal" /></RequireAuth>} />
-            <Route path="/kapal/new" element={<RequireAuth><AssetForm type="kapal" /></RequireAuth>} />
-            <Route path="/kapal/:id" element={<RequireAuth><AssetDetail type="kapal" /></RequireAuth>} />
-            <Route path="/kapal/:id/edit" element={<RequireAuth><AssetForm type="kapal" /></RequireAuth>} />
+              <Route path="/pangkalan" element={<AssetList type="pangkalan" />} />
+              <Route path="/pangkalan/new" element={<AssetForm type="pangkalan" />} />
+              <Route path="/pangkalan/:id" element={<AssetDetail type="pangkalan" />} />
+              <Route path="/pangkalan/:id/edit" element={<AssetForm type="pangkalan" />} />
 
-            <Route path="/pangkalan" element={<RequireAuth><AssetList type="pangkalan" /></RequireAuth>} />
-            <Route path="/pangkalan/new" element={<RequireAuth><AssetForm type="pangkalan" /></RequireAuth>} />
-            <Route path="/pangkalan/:id" element={<RequireAuth><AssetDetail type="pangkalan" /></RequireAuth>} />
-            <Route path="/pangkalan/:id/edit" element={<RequireAuth><AssetForm type="pangkalan" /></RequireAuth>} />
+              <Route path="/ai-analysis" element={<AIAnalysis />} />
 
-            <Route path="/ai-analysis" element={<RequireAuth><AIAnalysis /></RequireAuth>} />
-
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </div>
-    </AuthProvider>
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </Layout>
+        </Gatekeeper>
+      </BrowserRouter>
+    </div>
   );
 }
 
