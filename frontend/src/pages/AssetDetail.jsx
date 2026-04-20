@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { motion } from "framer-motion";
 
-export default function AssetDetail() {
-  const { id, type } = useParams();
+export default function AssetDetail({ type }) {
+  const { id } = useParams();
   const navigate = useNavigate();
   const [asset, setAsset] = useState(null);
   const [loading, setLoading] = useState(true);
