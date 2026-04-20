@@ -4,13 +4,15 @@ import { api } from "../lib/api";
 import { StatusBadge, ReadinessBar } from "../components/Tactical";
 import { Plus, Search, Ship, Building2 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useEditAuth } from "../context/EditAuthContext";
 
 export default function AssetList({ type }) {
   const [assets, setAssets] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const canEdit = true;
+  const { canEdit: hasEditAuth, openLogin } = useEditAuth();
+  const canEdit = hasEditAuth;
 
   useEffect(() => {
     setLoading(true);
@@ -33,13 +35,22 @@ export default function AssetList({ type }) {
           <h1 className="heading text-4xl sm:text-5xl font-bold">{title}</h1>
           <p className="text-[#8A94A6] mt-2">Daftar aset {type === "kapal" ? "kapal KRI" : "pangkalan"} Koarmada 3</p>
         </div>
-        {canEdit && (
+        {canEdit ? (
           <button
             onClick={() => navigate(`/${type}/new`)}
             data-testid={`create-${type}-btn`}
             className="tactical-btn tactical-btn-primary flex items-center gap-2"
           >
             <Plus size={14} /> TAMBAH {type === "kapal" ? "KAPAL" : "PANGKALAN"}
+          </button>
+        ) : (
+          <button
+            onClick={() => openLogin()}
+            data-testid="login-to-add-btn"
+            className="tactical-btn flex items-center gap-2"
+            title="Login admin untuk bisa tambah asset"
+          >
+            <Plus size={14} /> LOGIN UNTUK TAMBAH
           </button>
         )}
       </div>

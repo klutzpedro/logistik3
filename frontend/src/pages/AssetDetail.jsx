@@ -9,10 +9,12 @@ import {
   ArrowLeft, Edit, Trash2, Brain, Anchor, MapPin, User, Ship, Building2, Users, Radar, Target, Save, PencilLine,
 } from "lucide-react";
 import { motion } from "framer-motion";
+import { useEditAuth } from "../context/EditAuthContext";
 
 export default function AssetDetail({ type }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { canEdit: hasEditAuth, user: editUser, openLogin, logout: logoutEdit } = useEditAuth();
   const [asset, setAsset] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
@@ -20,8 +22,9 @@ export default function AssetDetail({ type }) {
   const [aiResult, setAiResult] = useState("");
   const [displayedText, setDisplayedText] = useState("");
 
-  const canEdit = true;
-  const canDelete = true;
+  // canEdit driven by role session
+  const canEdit = hasEditAuth;
+  const canDelete = hasEditAuth && editUser?.role === "super_user";
   const [editBasic, setEditBasic] = useState(false);
   const [basicForm, setBasicForm] = useState({ description: "", location: "", commander: "" });
 
@@ -128,13 +131,31 @@ export default function AssetDetail({ type }) {
         </div>
 
         <div className="flex gap-2">
-          {canEdit && (
+          {!hasEditAuth && (
+            <button
+              onClick={() => openLogin()}
+              data-testid="login-edit-btn"
+              className="tactical-btn tactical-btn-primary flex items-center gap-2"
+              title="Login admin/super_user untuk edit"
+            >
+              <User size={14} /> LOGIN UNTUK EDIT
+            </button>
+          )}
+          {hasEditAuth && (
             <>
+              <div
+                className="flex items-center gap-2 border border-[#00E676] px-3 py-1.5 text-xs mono uppercase text-[#00E676]"
+                data-testid="edit-badge"
+                title={`${editUser?.full_name || editUser?.email} (${editUser?.role})`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00E676]" style={{ boxShadow: "0 0 6px #00E676" }} />
+                EDIT MODE · {editUser?.role?.toUpperCase()}
+                <button onClick={logoutEdit} className="ml-2 opacity-60 hover:opacity-100">✕</button>
+              </div>
               <button
                 onClick={startEditBasic}
                 data-testid="edit-basic-btn"
                 className="tactical-btn flex items-center gap-2"
-                title="Edit info dasar inline"
               >
                 <PencilLine size={14} /> EDIT INFO
               </button>
@@ -321,13 +342,19 @@ export default function AssetDetail({ type }) {
             title="KESIAPAN OPERASIONAL"
             testid="readiness-panel"
             right={
-              <button
-                onClick={() => navigate(`/${type}/${id}/edit`)}
-                data-testid="quick-edit-full-btn"
-                className="label-mono text-[#00E5FF] hover:text-white"
-              >
-                [ EDIT LENGKAP → ]
-              </button>
+              hasEditAuth ? (
+                <button
+                  onClick={() => navigate(`/${type}/${id}/edit`)}
+                  data-testid="quick-edit-full-btn"
+                  className="label-mono text-[#00E5FF] hover:text-white"
+                >
+                  [ EDIT LENGKAP → ]
+                </button>
+              ) : (
+                <button onClick={() => openLogin()} className="label-mono text-[#8A94A6] hover:text-[#00E5FF]">
+                  [ LOGIN TO EDIT ]
+                </button>
+              )
             }
           >
             <div className="text-center py-4">
@@ -349,11 +376,13 @@ export default function AssetDetail({ type }) {
                 <button
                   key={s.k}
                   data-testid={`quick-konis-${s.k}`}
+                  disabled={!hasEditAuth}
                   onClick={async () => {
+                    if (!hasEditAuth) { openLogin(); return; }
                     const { data } = await api.patch(`/assets/${id}/konis`, { konis_status: s.k });
                     setAsset(data);
                   }}
-                  className="py-2 text-[10px] mono uppercase tracking-wider border transition-all"
+                  className="py-2 text-[10px] mono uppercase tracking-wider border transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   style={{
                     borderColor: asset.konis_status === s.k ? s.c : "#212530",
                     color: asset.konis_status === s.k ? s.c : "#8A94A6",
@@ -375,17 +404,15 @@ export default function AssetDetail({ type }) {
               <input
                 type="range" min="0" max="100" step="1"
                 value={asset.readiness_percentage}
+                disabled={!hasEditAuth}
                 data-testid="quick-readiness-slider"
                 onChange={(e) => setAsset({ ...asset, readiness_percentage: Number(e.target.value) })}
                 onMouseUp={async (e) => {
+                  if (!hasEditAuth) { openLogin(); return; }
                   const { data } = await api.patch(`/assets/${id}/konis`, { readiness_percentage: Number(e.target.value) });
                   setAsset(data);
                 }}
-                onTouchEnd={async (e) => {
-                  const { data } = await api.patch(`/assets/${id}/konis`, { readiness_percentage: asset.readiness_percentage });
-                  setAsset(data);
-                }}
-                className="w-full accent-[#00E5FF]"
+                className="w-full accent-[#00E5FF] disabled:opacity-50"
               />
               <ReadinessBar value={asset.readiness_percentage} />
             </div>
@@ -396,16 +423,22 @@ export default function AssetDetail({ type }) {
             title="KONDISI LOGISTIK"
             testid="logistics-panel"
             right={
-              <button
-                onClick={async () => {
-                  const { data } = await api.patch(`/assets/${id}/logistics`, asset.logistics);
-                  setAsset(data);
-                }}
-                data-testid="save-logistics-btn"
-                className="label-mono text-[#00E5FF] hover:text-white"
-              >
-                [ SIMPAN ]
-              </button>
+              hasEditAuth ? (
+                <button
+                  onClick={async () => {
+                    const { data } = await api.patch(`/assets/${id}/logistics`, asset.logistics);
+                    setAsset(data);
+                  }}
+                  data-testid="save-logistics-btn"
+                  className="label-mono text-[#00E5FF] hover:text-white"
+                >
+                  [ SIMPAN ]
+                </button>
+              ) : (
+                <button onClick={() => openLogin()} className="label-mono text-[#8A94A6] hover:text-[#00E5FF]">
+                  [ LOGIN TO EDIT ]
+                </button>
+              )
             }
           >
             <div className="grid grid-cols-2 gap-2 mb-3">
@@ -413,34 +446,36 @@ export default function AssetDetail({ type }) {
                 <LogisticsTank key={k} type={k} value={v} />
               ))}
             </div>
-            <div className="space-y-2 border-t border-[#212530] pt-3">
-              {Object.entries(asset.logistics || {}).map(([k, v]) => (
-                <div key={k} className="flex items-center gap-2">
-                  <span className="label-mono w-32 truncate">{k.replace(/_/g, " ")}</span>
-                  <input
-                    type="range" min="0" max="100" step="1"
-                    value={v}
-                    data-testid={`slider-${k}`}
-                    onChange={(e) =>
-                      setAsset({ ...asset, logistics: { ...asset.logistics, [k]: Number(e.target.value) } })
-                    }
-                    className="flex-1 accent-[#00E5FF]"
-                  />
-                  <input
-                    type="number" min="0" max="100"
-                    value={v}
-                    data-testid={`num-${k}`}
-                    onChange={(e) =>
-                      setAsset({ ...asset, logistics: { ...asset.logistics, [k]: Number(e.target.value) } })
-                    }
-                    className="w-16 bg-[#050608] border border-[#212530] px-2 py-1 text-xs text-right mono focus:border-[#00E5FF] focus:outline-none"
-                  />
+            {hasEditAuth && (
+              <div className="space-y-2 border-t border-[#212530] pt-3">
+                {Object.entries(asset.logistics || {}).map(([k, v]) => (
+                  <div key={k} className="flex items-center gap-2">
+                    <span className="label-mono w-32 truncate">{k.replace(/_/g, " ")}</span>
+                    <input
+                      type="range" min="0" max="100" step="1"
+                      value={v}
+                      data-testid={`slider-${k}`}
+                      onChange={(e) =>
+                        setAsset({ ...asset, logistics: { ...asset.logistics, [k]: Number(e.target.value) } })
+                      }
+                      className="flex-1 accent-[#00E5FF]"
+                    />
+                    <input
+                      type="number" min="0" max="100"
+                      value={v}
+                      data-testid={`num-${k}`}
+                      onChange={(e) =>
+                        setAsset({ ...asset, logistics: { ...asset.logistics, [k]: Number(e.target.value) } })
+                      }
+                      className="w-16 bg-[#050608] border border-[#212530] px-2 py-1 text-xs text-right mono focus:border-[#00E5FF] focus:outline-none"
+                    />
+                  </div>
+                ))}
+                <div className="text-xs text-[#8A94A6] mono pt-2">
+                  * Klik [SIMPAN] di atas untuk mengirim perubahan.
                 </div>
-              ))}
-              <div className="text-xs text-[#8A94A6] mono pt-2">
-                * Klik [SIMPAN] di atas untuk mengirim perubahan.
               </div>
-            </div>
+            )}
           </PanelCard>
 
           {/* AI Analysis */}

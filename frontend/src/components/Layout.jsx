@@ -1,8 +1,9 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Ship, Building2, Brain, Anchor, Radar, LogOut, Sun, Moon, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Ship, Building2, Brain, Anchor, Radar, LogOut, Sun, Moon, TrendingUp, LogIn, UserCheck } from "lucide-react";
 import { api } from "../lib/api";
 import { useTheme } from "../context/ThemeContext";
+import { useEditAuth } from "../context/EditAuthContext";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
@@ -15,6 +16,7 @@ const navItems = [
 export default function Layout({ children }) {
   const location = useLocation();
   const { theme, toggle } = useTheme();
+  const { canEdit, user: editUser, openLogin, logout: logoutEdit } = useEditAuth();
 
   const handleExit = async () => {
     try {
@@ -63,8 +65,34 @@ export default function Layout({ children }) {
           })}
         </nav>
 
-        <div className="p-4 border-t border-[#212530]">
-          <div className="mb-3">
+        <div className="p-4 border-t border-[#212530] space-y-3">
+          {canEdit ? (
+            <div className="border border-[#00E676]/50 bg-[#00E676]/5 p-3" data-testid="sidebar-edit-badge">
+              <div className="flex items-center gap-2 mb-1">
+                <UserCheck size={12} className="text-[#00E676]" />
+                <span className="label-mono text-[#00E676]">EDIT MODE</span>
+              </div>
+              <div className="text-xs mono text-[#F1F5F9] truncate">{editUser?.full_name || editUser?.email}</div>
+              <div className="text-[10px] mono text-[#00E676] uppercase mt-0.5">{editUser?.role}</div>
+              <button
+                onClick={logoutEdit}
+                data-testid="sidebar-edit-logout"
+                className="mt-2 text-[10px] mono uppercase tracking-wider text-[#8A94A6] hover:text-[#FF3D00]"
+              >
+                Keluar edit mode
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => openLogin()}
+              data-testid="sidebar-edit-login"
+              className="tactical-btn tactical-btn-primary w-full flex items-center justify-center gap-2"
+            >
+              <LogIn size={14} /> LOGIN EDIT
+            </button>
+          )}
+
+          <div>
             <div className="label-mono">Session</div>
             <div className="text-xs text-[#00E5FF] mono mt-1">via K3ICS.ONLINE</div>
           </div>

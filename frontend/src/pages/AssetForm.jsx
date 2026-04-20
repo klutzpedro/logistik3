@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../lib/api";
-import { ArrowLeft, Plus, X, Upload, Save, User } from "lucide-react";
+import { ArrowLeft, Plus, X, Upload, Save, User, Lock } from "lucide-react";
+import { useEditAuth } from "../context/EditAuthContext";
 
 const EMPTY_LOGISTICS = { bahan_bakar: 0, air_bersih: 0, fresh_room: 0, minyak_lincir: 0, amunisi: 0, ransum: 0 };
 
@@ -28,9 +29,10 @@ export default function AssetForm({ type }) {
   const [specRows, setSpecRows] = useState([{ key: "", value: "" }]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const { canEdit: hasEditAuth, openLogin } = useEditAuth();
 
   useEffect(() => {
-    if (isEdit) {
+    if (isEdit && hasEditAuth) {
       api.get(`/assets/${id}`).then(({ data }) => {
         setForm({ ...data, logistics: { ...EMPTY_LOGISTICS, ...data.logistics } });
         setSpecRows(
@@ -40,7 +42,30 @@ export default function AssetForm({ type }) {
         );
       });
     }
-  }, [id, isEdit]);
+  }, [id, isEdit, hasEditAuth]);
+
+  if (!hasEditAuth) {
+    return (
+      <div className="p-8" data-testid="form-locked">
+        <div className="max-w-md mx-auto border border-[#FFC400]/40 bg-[#FFC400]/5 p-6 text-center mt-12">
+          <Lock size={32} className="mx-auto mb-3 text-[#FFC400]" />
+          <div className="heading text-xl font-bold mb-2">EDIT DIKUNCI</div>
+          <p className="text-sm text-[#8A94A6] mb-4">
+            Halaman ini hanya bisa diakses oleh <span className="mono text-[#00E5FF]">admin</span> atau
+            <span className="mono text-[#00E5FF]"> super_user</span> dari k3ics.online.
+          </p>
+          <div className="flex gap-2 justify-center">
+            <button onClick={() => openLogin()} className="tactical-btn tactical-btn-primary" data-testid="locked-login-btn">
+              LOGIN UNTUK EDIT
+            </button>
+            <button onClick={() => navigate(`/${type}`)} className="tactical-btn">
+              KEMBALI
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files || []);

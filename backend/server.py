@@ -32,6 +32,10 @@ SESSION_HOURS = int(os.environ.get('SESSION_HOURS', '8'))
 K3ICS_LOGIN_URL = os.environ.get('K3ICS_LOGIN_URL', 'https://k3ics.online')
 COOKIE_SECURE = os.environ.get('COOKIE_SECURE', 'true').lower() == 'true'
 COOKIE_NAME = 'logistic3_session'
+EDIT_COOKIE_NAME = 'logistic3_edit_session'
+EDIT_SESSION_HOURS = int(os.environ.get('EDIT_SESSION_HOURS', '2'))
+K3ICS_VERIFY_URL = os.environ.get('K3ICS_VERIFY_URL', 'https://k3ics.online/api/auth/verify-for-logistic3')
+EDIT_ALLOWED_ROLES = {"admin", "super_user"}
 
 JWT_ALGO = "HS256"
 
@@ -156,6 +160,27 @@ def require_session(request: Request):
     return True
 
 
+def get_edit_claims(request: Request) -> Optional[dict]:
+    cookie = request.cookies.get(EDIT_COOKIE_NAME)
+    if not cookie:
+        return None
+    try:
+        return pyjwt.decode(cookie, JWT_SECRET, algorithms=[JWT_ALGO])
+    except Exception:
+        return None
+
+
+def require_edit_session(request: Request):
+    """Dependency: reject mutations unless user authenticated with admin/super_user role."""
+    claims = get_edit_claims(request)
+    if not claims or claims.get("role") not in EDIT_ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Aksi ini butuh login admin/super_user. Silakan klik tombol LOGIN untuk edit.",
+        )
+    return claims
+
+
 # =========== SSO ROUTES ===========
 @api_router.get("/sso/enter")
 async def sso_enter(sso: str, response: Response):
@@ -206,7 +231,99 @@ async def sso_check(request: Request):
 @api_router.post("/sso/logout")
 async def sso_logout(response: Response):
     response.delete_cookie(key=COOKIE_NAME, path="/")
+    response.delete_cookie(key=EDIT_COOKIE_NAME, path="/")
     return {"success": True, "redirect": K3ICS_LOGIN_URL}
+
+
+# =========== EDIT AUTH (2nd tier - k3ics role-based) ===========
+class EditLoginPayload(BaseModel):
+    email: str
+    password: str
+
+
+@api_router.post("/auth/edit-login")
+async def edit_login(data: EditLoginPayload, request: Request, response: Response):
+    """Verify user credentials against k3ics.online. If role is admin/super_user,
+    issue an `logistic3_edit_session` cookie that unlocks mutations."""
+    if not is_session_valid(request):
+        raise HTTPException(status_code=401, detail="SSO session required first")
+
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            r = await http.post(
+                K3ICS_VERIFY_URL,
+                json={"email": data.email, "password": data.password},
+                headers={"X-Logistic3-Secret": SSO_SECRET, "Content-Type": "application/json"},
+            )
+    except Exception as e:
+        logger.exception("k3ics verify call failed")
+        raise HTTPException(status_code=502, detail=f"Tidak bisa terhubung ke k3ics: {e}")
+
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"k3ics responded {r.status_code}")
+
+    body = r.json()
+    if not body.get("valid"):
+        reason = body.get("reason", "invalid")
+        msg = {
+            "bad_credentials": "Email atau password salah",
+            "not_approved": "Akun belum disetujui di k3ics",
+            "missing_credentials": "Email/password kosong",
+        }.get(reason, "Kredensial tidak valid")
+        raise HTTPException(status_code=401, detail=msg)
+
+    role = body.get("role", "user")
+    if role not in EDIT_ALLOWED_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Role '{role}' tidak berwenang edit KONIS. Hanya admin/super_user."
+        )
+
+    # Issue edit session cookie
+    payload = {
+        "email": body.get("email"),
+        "full_name": body.get("full_name"),
+        "role": role,
+        "iat": int(time.time()),
+        "exp": datetime.now(timezone.utc) + timedelta(hours=EDIT_SESSION_HOURS),
+    }
+    edit_cookie = pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+    response.set_cookie(
+        key=EDIT_COOKIE_NAME,
+        value=edit_cookie,
+        max_age=EDIT_SESSION_HOURS * 3600,
+        httponly=True,
+        secure=COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    return {
+        "success": True,
+        "role": role,
+        "full_name": body.get("full_name"),
+        "email": body.get("email"),
+        "expires_in_hours": EDIT_SESSION_HOURS,
+    }
+
+
+@api_router.get("/auth/edit-status")
+async def edit_status(request: Request):
+    claims = get_edit_claims(request)
+    if not claims:
+        return {"can_edit": False}
+    return {
+        "can_edit": claims.get("role") in EDIT_ALLOWED_ROLES,
+        "role": claims.get("role"),
+        "full_name": claims.get("full_name"),
+        "email": claims.get("email"),
+    }
+
+
+@api_router.post("/auth/edit-logout")
+async def edit_logout(response: Response):
+    response.delete_cookie(key=EDIT_COOKIE_NAME, path="/")
+    return {"success": True}
 
 
 # =========== ASSET ROUTES ===========
@@ -330,7 +447,7 @@ async def get_asset(asset_id: str, _=Depends(require_session)):
 
 
 @api_router.post("/assets", response_model=Asset)
-async def create_asset(data: AssetCreate, _=Depends(require_session)):
+async def create_asset(data: AssetCreate, _=Depends(require_session), __=Depends(require_edit_session)):
     asset = Asset(**data.model_dump())
     doc = asset.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
@@ -341,7 +458,7 @@ async def create_asset(data: AssetCreate, _=Depends(require_session)):
 
 
 @api_router.put("/assets/{asset_id}", response_model=Asset)
-async def update_asset(asset_id: str, data: AssetCreate, _=Depends(require_session)):
+async def update_asset(asset_id: str, data: AssetCreate, _=Depends(require_session), __=Depends(require_edit_session)):
     existing = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
@@ -354,7 +471,7 @@ async def update_asset(asset_id: str, data: AssetCreate, _=Depends(require_sessi
 
 
 @api_router.delete("/assets/{asset_id}")
-async def delete_asset(asset_id: str, _=Depends(require_session)):
+async def delete_asset(asset_id: str, _=Depends(require_session), __=Depends(require_edit_session)):
     result = await db.assets.delete_one({"id": asset_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
@@ -368,7 +485,7 @@ class QuickKonisUpdate(BaseModel):
 
 
 @api_router.patch("/assets/{asset_id}/konis", response_model=Asset)
-async def update_konis(asset_id: str, data: QuickKonisUpdate, _=Depends(require_session)):
+async def update_konis(asset_id: str, data: QuickKonisUpdate, _=Depends(require_session), __=Depends(require_edit_session)):
     existing = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
@@ -381,7 +498,7 @@ async def update_konis(asset_id: str, data: QuickKonisUpdate, _=Depends(require_
 
 
 @api_router.patch("/assets/{asset_id}/logistics", response_model=Asset)
-async def update_logistics(asset_id: str, data: Logistics, _=Depends(require_session)):
+async def update_logistics(asset_id: str, data: Logistics, _=Depends(require_session), __=Depends(require_edit_session)):
     existing = await db.assets.find_one({"id": asset_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Asset tidak ditemukan")

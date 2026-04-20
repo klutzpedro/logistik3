@@ -21,6 +21,16 @@ Aplikasi MONITORING DAN ANALISA LOGISTIK KAPAL KOARMADA 3 dengan analisa Kondisi
 2. **Operator** (Letkol/Mayor): create & edit assets
 3. **Viewer** (Kapten): read-only monitoring
 
+## Implemented (20 Apr 2026) — Edit Protection Verified
+- Backend + frontend flow tested end-to-end:
+  1. Akses `/` tanpa SSO → Gatekeeper blokir dengan "ACCESS DENIED" + tombol "LOGIN VIA K3ICS.ONLINE" (200 OK)
+  2. HMAC SSO token valid → `POST /api/sso/enter` → cookie terpasang, dashboard tampil
+  3. `PATCH /api/assets/{id}/konis` tanpa edit-session → 403 ("Aksi ini butuh login admin/super_user")
+  4. `GET /api/auth/edit-status` → `{can_edit:false}` saat belum login edit
+  5. Klik `LOGIN EDIT` → modal admin/super_user terbuka
+  6. Kredensial salah → 401 "Email atau password salah" (server-to-server ke k3ics.online berfungsi)
+- Note: verifikasi login SUKSES (admin/super_user) belum di-test karena butuh password akun k3ics asli (harus User yang test).
+
 ## Implemented (17 Apr 2026) — v1
 - JWT auth (register/login/me) dengan role-based access (admin/operator/viewer)
 - Seeded 3 user accounts + 5 KRI (Diponegoro, Sultan Hasanuddin, Bung Tomo, Nanggala, Banda Aceh) + 2 pangkalan (Lantamal XIV Sorong, Fasharkan Manokwari)

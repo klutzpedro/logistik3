@@ -10,6 +10,7 @@ import History from "./pages/History";
 import Layout from "./components/Layout";
 import Gatekeeper from "./components/Gatekeeper";
 import { ThemeProvider } from "./context/ThemeContext";
+import { EditAuthProvider } from "./context/EditAuthContext";
 import { Toaster } from "sonner";
 
 function TitleSetter() {
@@ -31,7 +32,8 @@ function App() {
           <TitleSetter />
           <Toaster theme="dark" position="top-right" />
           <Gatekeeper>
-            <Layout>
+            <EditAuthProvider>
+              <Layout>
               <Routes>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Dashboard />} />
@@ -51,7 +53,8 @@ function App() {
 
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />
               </Routes>
-            </Layout>
+              </Layout>
+            </EditAuthProvider>
           </Gatekeeper>
         </BrowserRouter>
       </div>
