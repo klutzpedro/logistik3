@@ -1,13 +1,12 @@
 .App {
     min-height: 100vh;
-    background-color: #050608;
-    color: #F1F5F9;
+    background-color: var(--bg);
+    color: var(--fg);
 }
 
-/* Typewriter caret */
 .typewriter-caret::after {
     content: "▊";
-    color: #00E5FF;
+    color: var(--accent);
     animation: blink 1s step-end infinite;
     margin-left: 2px;
 }
@@ -16,51 +15,54 @@
     50% { opacity: 0; }
 }
 
-/* Override shadcn buttons to tactical theme */
 .tactical-btn {
     font-family: 'IBM Plex Mono', monospace;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-size: 0.75rem;
     padding: 0.625rem 1.25rem;
-    border: 1px solid #212530;
+    border: 1px solid var(--border);
     background: transparent;
-    color: #F1F5F9;
+    color: var(--fg);
     transition: all 0.2s ease;
     cursor: pointer;
 }
-
 .tactical-btn:hover {
-    border-color: #00E5FF;
-    color: #00E5FF;
-    text-shadow: 0 0 8px rgba(0, 229, 255, 0.6);
-    background: rgba(0, 229, 255, 0.05);
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--panel-alt);
 }
 
 .tactical-btn-primary {
-    background: #00E5FF;
-    color: #050608;
-    border-color: #00E5FF;
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
 }
-
 .tactical-btn-primary:hover {
-    background: #5CFFFF;
-    color: #050608;
-    text-shadow: none;
-    box-shadow: 0 0 20px rgba(0, 229, 255, 0.6);
+    background: var(--accent-light);
+    color: var(--bg);
+    box-shadow: 0 0 20px var(--accent-dim);
 }
 
 .tactical-btn-danger:hover {
-    border-color: #FF3D00;
-    color: #FF3D00;
-    text-shadow: 0 0 8px rgba(255, 61, 0, 0.6);
+    border-color: var(--danger);
+    color: var(--danger);
 }
 
-/* Label style */
 .label-mono {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.7rem;
     letter-spacing: 0.2em;
     text-transform: uppercase;
-    color: #8A94A6;
+    color: var(--fg-muted);
 }
+
+/* Utility bg helpers for inline styles replaced */
+.bg-panel { background-color: var(--panel); }
+.bg-panel-alt { background-color: var(--panel-alt); }
+.bg-app { background-color: var(--bg); }
+.bg-app-alt { background-color: var(--bg-alt); }
+.border-panel { border-color: var(--border); }
+.text-muted { color: var(--fg-muted); }
+.text-accent { color: var(--accent); }
+.border-accent { border-color: var(--accent); }

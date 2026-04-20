@@ -4,6 +4,7 @@ import { api } from "../lib/api";
 import { StatusBadge, ReadinessBar, PanelCard } from "../components/Tactical";
 import ShipViewer3D from "../components/ShipViewer3D";
 import LogisticsTank from "../components/LogisticsTank";
+import AssetTimeSlider from "../components/AssetTimeSlider";
 import {
   ArrowLeft, Edit, Trash2, Brain, Anchor, MapPin, User, Ship, Building2, Users, Radar, Target, Save, PencilLine,
 } from "lucide-react";
@@ -107,13 +108,22 @@ export default function AssetDetail() {
             </div>
             <div className="ml-auto"><StatusBadge status={asset.konis_status} /></div>
           </div>
-          <div className="flex items-center gap-6 mt-4 text-sm text-[#8A94A6]">
+          <div className="flex items-center gap-6 mt-4 text-sm text-[#8A94A6] flex-wrap">
             {asset.location && (
               <div className="flex items-center gap-2"><MapPin size={14} /> {asset.location}</div>
             )}
             {asset.commander && (
               <div className="flex items-center gap-2"><User size={14} /> {asset.commander}</div>
             )}
+            {asset.updated_at && (() => {
+              const daysSince = Math.floor((Date.now() - new Date(asset.updated_at).getTime()) / 86400000);
+              const label = daysSince === 0 ? "Diupdate hari ini" : `Terakhir update ${daysSince} hari lalu`;
+              return (
+                <div className={`flex items-center gap-2 mono text-xs ${daysSince > 1 ? "text-[#FFC400]" : "text-[#00E676]"}`} data-testid="last-updated">
+                  <Radar size={12} /> {label}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -242,6 +252,9 @@ export default function AssetDetail() {
               <ShipViewer3D type={asset.type} />
             </div>
           </PanelCard>
+
+          {/* Time Slider / History */}
+          <AssetTimeSlider assetId={id} />
 
           {/* Description & Specs */}
           <PanelCard title="DESCRIPTION & SPECIFICATIONS" testid="specs">

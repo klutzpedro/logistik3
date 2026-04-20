@@ -6,8 +6,10 @@ import AssetList from "./pages/AssetList";
 import AssetDetail from "./pages/AssetDetail";
 import AssetForm from "./pages/AssetForm";
 import AIAnalysis from "./pages/AIAnalysis";
+import History from "./pages/History";
 import Layout from "./components/Layout";
 import Gatekeeper from "./components/Gatekeeper";
+import { ThemeProvider } from "./context/ThemeContext";
 import { Toaster } from "sonner";
 
 function TitleSetter() {
@@ -23,34 +25,37 @@ function TitleSetter() {
 
 function App() {
   return (
-    <div className="App">
-      <BrowserRouter>
-        <TitleSetter />
-        <Toaster theme="dark" position="top-right" />
-        <Gatekeeper>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+    <ThemeProvider>
+      <div className="App">
+        <BrowserRouter>
+          <TitleSetter />
+          <Toaster theme="dark" position="top-right" />
+          <Gatekeeper>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
 
-              <Route path="/kapal" element={<AssetList type="kapal" />} />
-              <Route path="/kapal/new" element={<AssetForm type="kapal" />} />
-              <Route path="/kapal/:id" element={<AssetDetail type="kapal" />} />
-              <Route path="/kapal/:id/edit" element={<AssetForm type="kapal" />} />
+                <Route path="/kapal" element={<AssetList type="kapal" />} />
+                <Route path="/kapal/new" element={<AssetForm type="kapal" />} />
+                <Route path="/kapal/:id" element={<AssetDetail type="kapal" />} />
+                <Route path="/kapal/:id/edit" element={<AssetForm type="kapal" />} />
 
-              <Route path="/pangkalan" element={<AssetList type="pangkalan" />} />
-              <Route path="/pangkalan/new" element={<AssetForm type="pangkalan" />} />
-              <Route path="/pangkalan/:id" element={<AssetDetail type="pangkalan" />} />
-              <Route path="/pangkalan/:id/edit" element={<AssetForm type="pangkalan" />} />
+                <Route path="/pangkalan" element={<AssetList type="pangkalan" />} />
+                <Route path="/pangkalan/new" element={<AssetForm type="pangkalan" />} />
+                <Route path="/pangkalan/:id" element={<AssetDetail type="pangkalan" />} />
+                <Route path="/pangkalan/:id/edit" element={<AssetForm type="pangkalan" />} />
 
-              <Route path="/ai-analysis" element={<AIAnalysis />} />
+                <Route path="/history" element={<History />} />
+                <Route path="/ai-analysis" element={<AIAnalysis />} />
 
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </Layout>
-        </Gatekeeper>
-      </BrowserRouter>
-    </div>
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </Layout>
+          </Gatekeeper>
+        </BrowserRouter>
+      </div>
+    </ThemeProvider>
   );
 }
 

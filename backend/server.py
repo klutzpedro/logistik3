@@ -221,6 +221,99 @@ def _serialize_asset_doc(doc: dict) -> dict:
     return doc
 
 
+# ===== HISTORY / SNAPSHOT =====
+# 1 hari KONIS = 06:00 - 06:00 hari berikutnya (Asia/Jakarta, UTC+7)
+KONIS_DAY_START_HOUR = 6
+TZ_OFFSET_HOURS = 7  # Asia/Jakarta (WIT Papua Barat = UTC+9 but using WIB +7 for Koarmada 3 standard)
+
+
+def get_konis_date(now: Optional[datetime] = None) -> str:
+    """Return logical KONIS date (YYYY-MM-DD) given current time.
+    If time < 06:00 local → date is yesterday.
+    """
+    if now is None:
+        now = datetime.now(timezone.utc)
+    # convert to local
+    local = now + timedelta(hours=TZ_OFFSET_HOURS)
+    if local.hour < KONIS_DAY_START_HOUR:
+        local = local - timedelta(days=1)
+    return local.strftime("%Y-%m-%d")
+
+
+async def snapshot_asset(asset_doc: dict):
+    """Upsert daily snapshot for the asset's current state."""
+    konis_date = get_konis_date()
+    snap = {
+        "asset_id": asset_doc["id"],
+        "asset_code": asset_doc["code"],
+        "asset_name": asset_doc["name"],
+        "type": asset_doc["type"],
+        "konis_date": konis_date,
+        "konis_status": asset_doc.get("konis_status", "siap"),
+        "readiness_percentage": asset_doc.get("readiness_percentage", 0),
+        "logistics": asset_doc.get("logistics", {}),
+        "weapon_systems_summary": [
+            {"id": w.get("id"), "name": w.get("name"), "status": w.get("status")}
+            for w in asset_doc.get("weapon_systems", [])
+        ],
+        "location": asset_doc.get("location"),
+        "commander": asset_doc.get("commander"),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.asset_snapshots.update_one(
+        {"asset_id": asset_doc["id"], "konis_date": konis_date},
+        {"$set": snap},
+        upsert=True,
+    )
+
+
+async def backfill_snapshots_if_empty():
+    """First run: generate snapshots for last 30 days for each asset (with random-ish variation
+    simulating history). Only runs once when asset_snapshots is empty."""
+    if await db.asset_snapshots.count_documents({}) > 0:
+        return
+    import random
+    assets = await db.assets.find({}, {"_id": 0}).to_list(1000)
+    if not assets:
+        return
+    today = datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET_HOURS)
+    for days_back in range(30, -1, -1):
+        d = (today - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        for a in assets:
+            # Add small random variation
+            base_read = a.get("readiness_percentage", 80)
+            drift = random.randint(-8, 8) if days_back > 0 else 0
+            read = max(0, min(100, base_read + drift - (days_back * 0.3)))
+
+            logi = a.get("logistics", {}) or {}
+            logi_var = {k: max(0, min(100, v + random.randint(-10, 5))) for k, v in logi.items()}
+
+            # Status might change for older days
+            status = a.get("konis_status", "siap")
+            if read < 40:
+                status = "tidak_siap"
+            elif read < 70:
+                status = "siap_terbatas"
+            else:
+                status = "siap"
+
+            await db.asset_snapshots.insert_one({
+                "asset_id": a["id"],
+                "asset_code": a["code"],
+                "asset_name": a["name"],
+                "type": a["type"],
+                "konis_date": d,
+                "konis_status": status,
+                "readiness_percentage": round(read, 1),
+                "logistics": logi_var,
+                "weapon_systems_summary": [],
+                "location": a.get("location"),
+                "commander": a.get("commander"),
+                "updated_at": (today - timedelta(days=days_back)).isoformat(),
+            })
+    logger.info("Backfilled 30 days of snapshots.")
+
+
 @api_router.get("/assets", response_model=List[Asset])
 async def list_assets(type: Optional[AssetType] = None, _=Depends(require_session)):
     q = {"type": type} if type else {}
@@ -243,6 +336,7 @@ async def create_asset(data: AssetCreate, _=Depends(require_session)):
     doc["created_at"] = doc["created_at"].isoformat()
     doc["updated_at"] = doc["updated_at"].isoformat()
     await db.assets.insert_one(doc)
+    await snapshot_asset(doc)
     return asset
 
 
@@ -255,6 +349,7 @@ async def update_asset(asset_id: str, data: AssetCreate, _=Depends(require_sessi
     update_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.assets.update_one({"id": asset_id}, {"$set": update_doc})
     new_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    await snapshot_asset(new_doc)
     return Asset(**_serialize_asset_doc(new_doc))
 
 
@@ -281,6 +376,7 @@ async def update_konis(asset_id: str, data: QuickKonisUpdate, _=Depends(require_
     patch["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.assets.update_one({"id": asset_id}, {"$set": patch})
     new_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    await snapshot_asset(new_doc)
     return Asset(**_serialize_asset_doc(new_doc))
 
 
@@ -294,7 +390,127 @@ async def update_logistics(asset_id: str, data: Logistics, _=Depends(require_ses
         {"$set": {"logistics": data.model_dump(), "updated_at": datetime.now(timezone.utc).isoformat()}},
     )
     new_doc = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    await snapshot_asset(new_doc)
     return Asset(**_serialize_asset_doc(new_doc))
+
+
+# =========== HISTORY ENDPOINTS ===========
+@api_router.get("/assets/{asset_id}/history")
+async def asset_history(asset_id: str, days: int = 30, _=Depends(require_session)):
+    """Return daily snapshots for the past N days (chronological).
+    For days with no update, returns the last known state carried forward with `is_stale=True`."""
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
+
+    now_local = datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET_HOURS)
+    start_date = (now_local - timedelta(days=days)).strftime("%Y-%m-%d")
+    end_date = get_konis_date()
+
+    snaps = await db.asset_snapshots.find(
+        {"asset_id": asset_id, "konis_date": {"$gte": start_date, "$lte": end_date}},
+        {"_id": 0},
+    ).sort("konis_date", 1).to_list(1000)
+
+    by_date = {s["konis_date"]: s for s in snaps}
+
+    # Fill gaps (day without update → carry forward last known + mark stale)
+    result = []
+    last_known = None
+    for i in range(days, -1, -1):
+        d = (now_local - timedelta(days=i)).strftime("%Y-%m-%d")
+        if d in by_date:
+            last_known = by_date[d]
+            result.append({**last_known, "is_stale": False, "date": d})
+        elif last_known:
+            result.append({**last_known, "is_stale": True, "date": d, "konis_date": d})
+        else:
+            # no data at all yet for this asset
+            result.append({
+                "date": d, "konis_date": d, "asset_id": asset_id,
+                "konis_status": "siap", "readiness_percentage": 0,
+                "logistics": {}, "is_stale": True, "no_data": True,
+            })
+    return {
+        "asset_id": asset_id,
+        "asset_name": asset["name"],
+        "asset_code": asset["code"],
+        "days": days,
+        "start_date": start_date,
+        "end_date": end_date,
+        "history": result,
+    }
+
+
+@api_router.get("/assets/{asset_id}/at")
+async def asset_at_date(asset_id: str, date: str, _=Depends(require_session)):
+    """Get asset state at a specific date (YYYY-MM-DD). If no snapshot that day, carry forward."""
+    asset = await db.assets.find_one({"id": asset_id}, {"_id": 0})
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset tidak ditemukan")
+
+    snap = await db.asset_snapshots.find_one(
+        {"asset_id": asset_id, "konis_date": {"$lte": date}},
+        {"_id": 0},
+        sort=[("konis_date", -1)],
+    )
+    if not snap:
+        return {"no_data": True, "asset_id": asset_id, "requested_date": date}
+    snap["requested_date"] = date
+    snap["is_stale"] = snap.get("konis_date") != date
+    return snap
+
+
+@api_router.get("/dashboard/history")
+async def dashboard_history(days: int = 30, _=Depends(require_session)):
+    """Fleet-wide aggregated trend over the past N days."""
+    now_local = datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET_HOURS)
+    start_date = (now_local - timedelta(days=days)).strftime("%Y-%m-%d")
+    end_date = get_konis_date()
+
+    snaps = await db.asset_snapshots.find(
+        {"konis_date": {"$gte": start_date, "$lte": end_date}},
+        {"_id": 0},
+    ).to_list(100000)
+
+    # Group by date
+    by_date: Dict[str, list] = {}
+    for s in snaps:
+        by_date.setdefault(s["konis_date"], []).append(s)
+
+    timeline = []
+    for i in range(days, -1, -1):
+        d = (now_local - timedelta(days=i)).strftime("%Y-%m-%d")
+        day_snaps = by_date.get(d, [])
+        if not day_snaps:
+            timeline.append({
+                "date": d, "count": 0, "avg_readiness": 0,
+                "siap": 0, "siap_terbatas": 0, "tidak_siap": 0,
+                "logistics_avg": {},
+            })
+            continue
+        avg_read = sum(s.get("readiness_percentage", 0) for s in day_snaps) / len(day_snaps)
+        siap = sum(1 for s in day_snaps if s.get("konis_status") == "siap")
+        terbatas = sum(1 for s in day_snaps if s.get("konis_status") == "siap_terbatas")
+        tidak = sum(1 for s in day_snaps if s.get("konis_status") == "tidak_siap")
+
+        # logistics average
+        logi_sums = {}
+        for s in day_snaps:
+            for k, v in (s.get("logistics", {}) or {}).items():
+                logi_sums.setdefault(k, []).append(v)
+        logi_avg = {k: round(sum(vals) / len(vals), 1) for k, vals in logi_sums.items()}
+
+        timeline.append({
+            "date": d,
+            "count": len(day_snaps),
+            "avg_readiness": round(avg_read, 1),
+            "siap": siap,
+            "siap_terbatas": terbatas,
+            "tidak_siap": tidak,
+            "logistics_avg": logi_avg,
+        })
+    return {"days": days, "timeline": timeline}
 
 
 # =========== DASHBOARD ===========

@@ -1,17 +1,20 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
-import { LayoutDashboard, Ship, Building2, Brain, Anchor, Radar, LogOut } from "lucide-react";
+import { LayoutDashboard, Ship, Building2, Brain, Anchor, Radar, LogOut, Sun, Moon, TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
+import { useTheme } from "../context/ThemeContext";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/kapal", label: "Kapal / KRI", icon: Ship, testid: "nav-kapal" },
   { to: "/pangkalan", label: "Pangkalan", icon: Building2, testid: "nav-pangkalan" },
+  { to: "/history", label: "History", icon: TrendingUp, testid: "nav-history" },
   { to: "/ai-analysis", label: "AI KONIS", icon: Brain, testid: "nav-ai" },
 ];
 
 export default function Layout({ children }) {
   const location = useLocation();
+  const { theme, toggle } = useTheme();
 
   const handleExit = async () => {
     try {
@@ -82,7 +85,17 @@ export default function Layout({ children }) {
             <span className="label-mono text-[#00E5FF]">SYSTEM ONLINE</span>
             <span className="label-mono text-[#8A94A6]">// {new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })}</span>
           </div>
-          <div className="label-mono text-[#8A94A6]">SORONG · PAPUA BARAT DAYA</div>
+          <div className="flex items-center gap-4">
+            <span className="label-mono text-[#8A94A6]">SORONG · PAPUA BARAT DAYA</span>
+            <button
+              onClick={toggle}
+              data-testid="theme-toggle"
+              title="Toggle Light/Dark"
+              className="p-1.5 border border-[#212530] hover:border-[#00E5FF] text-[#00E5FF] transition-all"
+            >
+              {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
+          </div>
         </div>
         <div className="pt-16 min-h-screen">{children}</div>
       </main>
