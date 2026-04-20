@@ -339,7 +339,7 @@ export default function AssetDetail({ type }) {
         <div className="space-y-6">
           {/* Readiness + Quick Edit */}
           <PanelCard
-            title="KESIAPAN OPERASIONAL"
+            title="KESIAPAN"
             testid="readiness-panel"
             right={
               hasEditAuth ? (
@@ -348,11 +348,11 @@ export default function AssetDetail({ type }) {
                   data-testid="quick-edit-full-btn"
                   className="label-mono text-[#00E5FF] hover:text-white"
                 >
-                  [ EDIT LENGKAP → ]
+                  [ EDIT → ]
                 </button>
               ) : (
                 <button onClick={() => openLogin()} className="label-mono text-[#8A94A6] hover:text-[#00E5FF]">
-                  [ LOGIN TO EDIT ]
+                  [ LOGIN ]
                 </button>
               )
             }
@@ -436,7 +436,7 @@ export default function AssetDetail({ type }) {
                 </button>
               ) : (
                 <button onClick={() => openLogin()} className="label-mono text-[#8A94A6] hover:text-[#00E5FF]">
-                  [ LOGIN TO EDIT ]
+                  [ LOGIN ]
                 </button>
               )
             }

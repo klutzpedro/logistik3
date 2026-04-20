@@ -49,9 +49,9 @@ export function PanelCard({ title, children, right, className = "", testid }) {
   return (
     <div className={`border border-[#212530] bg-[#0A0C10] ${className}`} data-testid={testid}>
       {title && (
-        <div className="flex items-center justify-between border-b border-[#212530] px-4 py-2.5 bg-[#080A0E]">
-          <div className="label-mono text-[#00E5FF]">{title}</div>
-          {right}
+        <div className="flex items-center justify-between gap-3 border-b border-[#212530] px-4 py-2.5 bg-[#080A0E]">
+          <div className="label-mono text-[#00E5FF] truncate min-w-0">{title}</div>
+          {right && <div className="whitespace-nowrap shrink-0">{right}</div>}
         </div>
       )}
       <div className="p-4">{children}</div>
